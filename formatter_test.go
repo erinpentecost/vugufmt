@@ -74,3 +74,14 @@ func TestVuguFmtNoError(t *testing.T) {
 
 	assert.NoError(t, err)
 }
+
+func TestEscaping(t *testing.T) {
+	// I'd like the > to not be escaped into &gt;
+	testCode := "<div vg-if='len(data.bpi.BPI) > 0'></div>"
+	formatter := NewFormatter(UseGoFmt(false))
+	// run gofmt on it
+	var buf bytes.Buffer
+	assert.NoError(t, formatter.Format("", strings.NewReader(testCode), &buf), testCode)
+	prettyVersion := buf.String()
+	assert.Equal(t, testCode, prettyVersion)
+}

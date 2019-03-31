@@ -2,8 +2,11 @@ package vugufmt
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -11,6 +14,8 @@ import (
 
 // Formatter allows you to format vugu files.
 type Formatter struct {
+	// FmtScripts maps script blocks to formatting
+	// functions.
 	// For each type of script block,
 	// we can run it through the supplied function.
 	// If the function returns error, we should
@@ -39,7 +44,11 @@ func NewFormatter(opts ...func(*Formatter)) *Formatter {
 
 // Format runs vugufmt on input, and sends a pretty version of
 // it to output. If there is an error, throw away output!
-func (f *Formatter) Format(input io.Reader, output io.Writer) error {
+// filename is optional, but helps with generating useful output.
+func (f *Formatter) Format(filename string, input io.Reader, output io.Writer) error {
+	if filename == "" {
+		filename = "stdin"
+	}
 	// First process the html bits
 	doc, err := html.Parse(input)
 	if err != nil {
@@ -60,6 +69,8 @@ func (f *Formatter) Format(input io.Reader, output io.Writer) error {
 					return fmt.Errorf("failed to render HTML5: %v", err)
 				}
 			}
+		} else if n.Data == "head" {
+			return errors.New("head tag is forbidden")
 		} else {
 			for c := n.FirstChild; c != nil; c = c.NextSibling {
 				renderBody(c)
@@ -87,8 +98,6 @@ func (f *Formatter) parseHTML(n *html.Node) error {
 	if scriptFmt, ok := f.FmtScripts[scriptType]; ok {
 		var buf bytes.Buffer
 
-		//fmt.Printf("\n\n\t%s:\n\n%s\n\n", scriptType, n.Data)
-
 		// Exit out on error.
 		if err := scriptFmt(strings.NewReader(n.Data), &buf); err != nil {
 			return err
@@ -105,4 +114,39 @@ func (f *Formatter) parseHTML(n *html.Node) error {
 		}
 	}
 	return nil
+}
+
+// Diff will show differences between input and what
+// Format() would do. It will return (true, nil) if there
+// is a difference, (false, nil) if there is no difference,
+// and (*, notnil) when the difference can't be determined.
+// filename is optional, but helps with generating useful output.
+func (f *Formatter) Diff(filename string, input io.Reader, output io.Writer) (bool, error) {
+	if filename == "" {
+		filename = "stdin"
+	}
+
+	var resBuff bytes.Buffer
+	src, err := ioutil.ReadAll(input)
+	if err != nil {
+		return false, err
+	}
+	if err := f.Format(filename, bytes.NewReader(src), &resBuff); err != nil {
+		return false, err
+	}
+	res := resBuff.Bytes()
+
+	// No difference!
+	if bytes.Equal(src, res) {
+		return false, nil
+	}
+
+	// There is a difference, so what is it?
+	data, err := diff(src, res, filename)
+	if err != nil {
+		return true, fmt.Errorf("computing diff: %s", err)
+	}
+	output.Write([]byte(fmt.Sprintf("diff -u %s %s\n", filepath.ToSlash(filename+".orig"), filepath.ToSlash(filename))))
+	output.Write(data)
+	return true, nil
 }

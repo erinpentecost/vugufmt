@@ -5,15 +5,14 @@
 package main
 
 import (
-	"os/exec"
-	"bytes"
 	"flag"
 	"fmt"
-	"os"
 	"io"
-	"strings"
+	"os"
 	"path/filepath"
-	"golang.org/x/net/html"
+	"strings"
+
+	"github.com/erinpentecost/vugufmt"
 )
 
 var exitCode = 0
@@ -25,7 +24,7 @@ func main() {
 
 func vugufmtMain() {
 	// Handle input flags
-	flag.Usage = func(){
+	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: vugufmt [flags] [path ...]\n")
 		flag.PrintDefaults()
 	}
@@ -91,7 +90,7 @@ func processFile(filename string, in io.Reader, out io.Writer, stdin bool) error
 			return err
 		}
 		defer f.Close()
-		
+
 		if _, err := f.Stat(); err != nil {
 			return err
 		}
@@ -100,85 +99,9 @@ func processFile(filename string, in io.Reader, out io.Writer, stdin bool) error
 	}
 
 	// First process the html bits
-	doc, err := html.Parse(in)
-	if err != nil {
-		return err
-	}
-	if err := parseHTML(doc); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to parse file: %v\n", err)
-	}
-
-	// At this point, re-print the parse tree.
-	if err := html.Render(out, doc); err != nil {
+	if err := vugufmt.RunFmt(in, out); err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func parseHTML(n *html.Node) error {
-	// Are we in the child of a script tag?
-	scriptType := ""
-	if n.Type == html.TextNode && n.Parent.Type == html.ElementNode && n.Parent.Data == "script" {
-		for _, tag := range n.Parent.Attr {
-			if tag.Key == "type" {
-				scriptType = tag.Val
-				break
-			}
-		}
-	}
-	// Handle the script type formatting.
-	switch scriptType {
-	case "application/x-go":
-		fmted, err := runGoFmt(n.Data)
-		// Exit out on error.
-		if err != nil {
-			return err
-		}
-		// Save over Data with the nice version.
-		n.Data = fmted
-	}
-	// Continue on with the recursive pass.
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if err := parseHTML(c); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func runGoFmt(input string) (string, error) {
-	// build up command to run
-	cmd := exec.Command("gofmt")
-
-	// I need to capture output
-	var fmtOutput bytes.Buffer
-	cmd.Stderr = &fmtOutput
-	cmd.Stdout = &fmtOutput
-
-	// also set up input pipe
-	read, write := io.Pipe()
-	cmd.Stdin = read
-
-	// copy down environment variables
-	cmd.Env = os.Environ()
-
-	// start gofmt
-	if err := cmd.Start(); err != nil {
-		return input, fmt.Errorf("can't run gofmt: %s", err)
-	}
-
-	// stream in the raw source
-	if _, err := write.Write([]byte(input)); err != nil && err != io.ErrClosedPipe {
-		return input, fmt.Errorf("gofmt failed: %s", err)
-	}
-
-	write.Close()
-	// wait until gofmt is done
-	if err := cmd.Wait(); err != nil {
-		return input, fmt.Errorf("go fmt error %v; full output: %s", err, string(fmtOutput.Bytes()))
-	}
-
-	
-	return string(fmtOutput.Bytes()), nil
 }

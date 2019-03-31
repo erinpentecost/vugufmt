@@ -9,13 +9,13 @@ import (
 	"golang.org/x/net/html"
 )
 
-func runHTMLFmt(input io.Reader, output io.Writer) error {
+func runHTMLFmt(input io.Reader, output io.Writer, simplify bool) error {
 	// First process the html bits
 	doc, err := html.Parse(input)
 	if err != nil {
 		return fmt.Errorf("failed to parse HTML5: %v", err)
 	}
-	if err := parseHTML(doc); err != nil {
+	if err := parseHTML(doc, simplify); err != nil {
 		return fmt.Errorf("failed to walk HTML5: %v", err)
 	}
 
@@ -41,7 +41,7 @@ func runHTMLFmt(input io.Reader, output io.Writer) error {
 	return renderBody(doc)
 }
 
-func parseHTML(n *html.Node) error {
+func parseHTML(n *html.Node, simplify bool) error {
 	// Are we in the child of a script tag?
 	scriptType := ""
 	if n.Type == html.TextNode && n.Parent.Type == html.ElementNode && n.Parent.Data == "script" {
@@ -58,7 +58,7 @@ func parseHTML(n *html.Node) error {
 		var buf bytes.Buffer
 
 		// Exit out on error.
-		if err := runGoFmt(strings.NewReader(n.Data), &buf); err != nil {
+		if err := runGoFmt(strings.NewReader(n.Data), &buf, simplify); err != nil {
 			return err
 		}
 		// Save over Data with the nice version.
@@ -66,7 +66,7 @@ func parseHTML(n *html.Node) error {
 	}
 	// Continue on with the recursive pass.
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if err := parseHTML(c); err != nil {
+		if err := parseHTML(c, simplify); err != nil {
 			return err
 		}
 	}

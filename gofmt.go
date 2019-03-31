@@ -7,9 +7,13 @@ import (
 	"os/exec"
 )
 
-func runGoFmt(input io.Reader, output io.Writer) error {
+func runGoFmt(input io.Reader, output io.Writer, simplify bool) error {
 	// build up command to run
 	cmd := exec.Command("gofmt")
+
+	if simplify {
+		cmd.Args = []string{"-s"}
+	}
 
 	// I need to capture output
 	cmd.Stderr = output

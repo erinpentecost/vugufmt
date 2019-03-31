@@ -27,7 +27,7 @@ func TestVuguFmtNoError(t *testing.T) {
 		assert.NoError(t, err, f)
 		// run gofmt on it
 		var buf bytes.Buffer
-		assert.NoError(t, RunFmt(strings.NewReader(testFileString), &buf), f)
+		assert.NoError(t, RunFmt(strings.NewReader(testFileString), &buf, false), f)
 		prettyVersion := buf.String()
 
 		// make sure nothing changed!

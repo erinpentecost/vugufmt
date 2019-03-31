@@ -31,7 +31,7 @@ func TestGoFmtNoError(t *testing.T) {
 		assert.NoError(t, err, f)
 		// run gofmt on it
 		var buf bytes.Buffer
-		assert.NoError(t, runGoFmt(strings.NewReader(testFileString), &buf), f)
+		assert.NoError(t, runGoFmt(strings.NewReader(testFileString), &buf, false), f)
 		// make sure nothing changed!
 		assert.NotNil(t, buf.String(), f)
 		assert.Equal(t, testFileString, buf.String(), f)
@@ -51,7 +51,7 @@ func TestGoFmtError(t *testing.T) {
 	testCode := "package yeah\n\nvar hey := woo\n"
 	// run gofmt on it
 	var buf bytes.Buffer
-	err := runGoFmt(strings.NewReader(testCode), &buf)
+	err := runGoFmt(strings.NewReader(testCode), &buf, false)
 	assert.Error(t, err, buf.String())
 	fmtErr := fromGoFmt(buf.String(), 0)
 	assert.Equal(t, 3, fmtErr.Line)

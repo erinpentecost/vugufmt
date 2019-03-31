@@ -12,6 +12,7 @@ import (
 )
 
 func TestVuguFmtNoError(t *testing.T) {
+	formatter := NewFormatter(UseGoFmt(false))
 	fmt := func(f string) {
 		// Need to un-relativize the paths
 		absPath, err := filepath.Abs(f)
@@ -27,7 +28,7 @@ func TestVuguFmtNoError(t *testing.T) {
 		assert.NoError(t, err, f)
 		// run gofmt on it
 		var buf bytes.Buffer
-		assert.NoError(t, RunFmt(strings.NewReader(testFileString), &buf, false), f)
+		assert.NoError(t, formatter.Format(strings.NewReader(testFileString), &buf), f)
 		prettyVersion := buf.String()
 
 		// make sure nothing changed!

@@ -16,6 +16,7 @@ import (
 // is perfectly formatted. It uses all the .go files in this
 // package to test against.
 func TestGoFmtNoError(t *testing.T) {
+
 	fmt := func(f string) {
 		// Need to un-relativize the paths
 		absPath, err := filepath.Abs(f)

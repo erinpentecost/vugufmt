@@ -9,13 +9,43 @@ import (
 	"golang.org/x/net/html"
 )
 
-func runHTMLFmt(input io.Reader, output io.Writer, simplify bool) error {
+// Formatter allows you to format vugu files.
+type Formatter struct {
+	// For each type of script block,
+	// we can run it through the supplied function.
+	// If the function returns error, we should
+	// not accept the output written to the writer.
+	// You can add your own custom one for JS, for
+	// example. If you want to use gofmt or goimports,
+	// see how to apply options in NewFormatter.
+	FmtScripts map[string](func(io.Reader, io.Writer) error)
+}
+
+// NewFormatter creates a new formatter.
+// Pass in vugufmt.UseGoFmt to use gofmt.
+// Pass in vugufmt.UseGoImports to use goimports.
+func NewFormatter(opts ...func(*Formatter)) *Formatter {
+	f := &Formatter{
+		FmtScripts: make(map[string](func(io.Reader, io.Writer) error)),
+	}
+
+	// apply options
+	for _, opt := range opts {
+		opt(f)
+	}
+
+	return f
+}
+
+// Format runs vugufmt on input, and sends a pretty version of
+// it to output. If there is an error, throw away output!
+func (f *Formatter) Format(input io.Reader, output io.Writer) error {
 	// First process the html bits
 	doc, err := html.Parse(input)
 	if err != nil {
 		return fmt.Errorf("failed to parse HTML5: %v", err)
 	}
-	if err := parseHTML(doc, simplify); err != nil {
+	if err := f.parseHTML(doc); err != nil {
 		return fmt.Errorf("failed to walk HTML5: %v", err)
 	}
 
@@ -41,7 +71,7 @@ func runHTMLFmt(input io.Reader, output io.Writer, simplify bool) error {
 	return renderBody(doc)
 }
 
-func parseHTML(n *html.Node, simplify bool) error {
+func (f *Formatter) parseHTML(n *html.Node) error {
 	// Are we in the child of a script tag?
 	scriptType := ""
 	if n.Type == html.TextNode && n.Parent.Type == html.ElementNode && n.Parent.Data == "script" {
@@ -52,21 +82,25 @@ func parseHTML(n *html.Node, simplify bool) error {
 			}
 		}
 	}
+
 	// Handle the script type formatting.
-	switch scriptType {
-	case "application/x-go":
+	if scriptFmt, ok := f.FmtScripts[scriptType]; ok {
 		var buf bytes.Buffer
 
+		//fmt.Printf("\n\n\t%s:\n\n%s\n\n", scriptType, n.Data)
+
 		// Exit out on error.
-		if err := runGoFmt(strings.NewReader(n.Data), &buf, simplify); err != nil {
+		if err := scriptFmt(strings.NewReader(n.Data), &buf); err != nil {
 			return err
 		}
+
 		// Save over Data with the nice version.
 		n.Data = buf.String()
 	}
+
 	// Continue on with the recursive pass.
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if err := parseHTML(c, simplify); err != nil {
+		if err := f.parseHTML(c); err != nil {
 			return err
 		}
 	}

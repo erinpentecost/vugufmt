@@ -119,7 +119,9 @@ func processFile(filename string, in io.Reader, out io.Writer) error {
 
 	var resBuff bytes.Buffer
 
-	if err := vugufmt.RunFmt(bytes.NewReader(src), &resBuff, *simplifyAST); err != nil {
+	formatter := vugufmt.NewFormatter(vugufmt.UseGoFmt(*simplifyAST))
+
+	if err := formatter.Format(bytes.NewReader(src), &resBuff); err != nil {
 		return err
 	}
 	res := resBuff.Bytes()

@@ -7,6 +7,18 @@ import (
 	"os/exec"
 )
 
+// UseGoFmt sets the formatter to use gofmt on x-go blocks.
+// Set simplifyAST to true to simplify the AST. This is false
+// by default for gofmt, and is the same as passing in -s for it.
+func UseGoFmt(simplifyAST bool) func(*Formatter) {
+
+	return func(f *Formatter) {
+		f.FmtScripts["application/x-go"] = func(input io.Reader, output io.Writer) error {
+			return runGoFmt(input, output, simplifyAST)
+		}
+	}
+}
+
 func runGoFmt(input io.Reader, output io.Writer, simplify bool) error {
 	// build up command to run
 	cmd := exec.Command("gofmt")

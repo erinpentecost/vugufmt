@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"golang.org/x/net/html"
+	"github.com/erinpentecost/vugufmt/htmlx"
 )
 
 // Formatter allows you to format vugu files.
@@ -50,7 +50,7 @@ func (f *Formatter) Format(filename string, input io.Reader, output io.Writer) e
 		filename = "stdin"
 	}
 	// First process the html bits
-	doc, err := html.Parse(input)
+	doc, err := htmlx.Parse(input)
 	if err != nil {
 		return fmt.Errorf("failed to parse HTML5: %v", err)
 	}
@@ -60,12 +60,12 @@ func (f *Formatter) Format(filename string, input io.Reader, output io.Writer) e
 
 	// At this point, re-print the parse tree.
 	// I only want to print the body portion.
-	var renderBody func(n *html.Node) error
+	var renderBody func(n *htmlx.Node) error
 
-	renderBody = func(n *html.Node) error {
+	renderBody = func(n *htmlx.Node) error {
 		if n.Data == "body" {
 			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				if err := html.Render(output, c); err != nil {
+				if err := htmlx.Render(output, c); err != nil {
 					return fmt.Errorf("failed to render HTML5: %v", err)
 				}
 			}
@@ -82,29 +82,28 @@ func (f *Formatter) Format(filename string, input io.Reader, output io.Writer) e
 	return renderBody(doc)
 }
 
-func (f *Formatter) parseHTML(n *html.Node) error {
-	// Are we in the child of a script tag?
-	scriptType := ""
-	if n.Type == html.TextNode && n.Parent.Type == html.ElementNode && n.Parent.Data == "script" {
+func (f *Formatter) parseHTML(n *htmlx.Node) error {
+	// Clean up script blocks!
+	if n.Type == htmlx.TextNode && n.Parent.Type == htmlx.ElementNode && n.Parent.Data == "script" {
+		scriptType := ""
 		for _, tag := range n.Parent.Attr {
 			if tag.Key == "type" {
 				scriptType = tag.Val
+				// Handle the script type formatting.
+				if scriptFmt, ok := f.FmtScripts[scriptType]; ok {
+					var buf bytes.Buffer
+
+					// Exit out on error.
+					if err := scriptFmt(strings.NewReader(n.Data), &buf); err != nil {
+						return err
+					}
+
+					// Save over Data with the nice version.
+					n.Data = buf.String()
+				}
 				break
 			}
 		}
-	}
-
-	// Handle the script type formatting.
-	if scriptFmt, ok := f.FmtScripts[scriptType]; ok {
-		var buf bytes.Buffer
-
-		// Exit out on error.
-		if err := scriptFmt(strings.NewReader(n.Data), &buf); err != nil {
-			return err
-		}
-
-		// Save over Data with the nice version.
-		n.Data = buf.String()
 	}
 
 	// Continue on with the recursive pass.

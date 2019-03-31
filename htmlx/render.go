@@ -160,13 +160,13 @@ func render1(w writer, n *Node) error {
 		if _, err := w.WriteString(a.Key); err != nil {
 			return err
 		}
-		if _, err := w.WriteString(`="`); err != nil {
+		if _, err := w.WriteString(`='`); err != nil {
 			return err
 		}
-		if err := escape(w, a.Val); err != nil {
+		if err := attrEscape(w, a.Val); err != nil {
 			return err
 		}
-		if err := w.WriteByte('"'); err != nil {
+		if err := w.WriteByte('\''); err != nil {
 			return err
 		}
 	}

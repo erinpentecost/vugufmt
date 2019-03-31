@@ -64,7 +64,7 @@ func TestVuguFmtNoError(t *testing.T) {
 		assert.NotNil(t, buf.String(), f)
 		assert.Equal(t, testFileString, prettyVersion, f)
 
-		//ioutil.WriteFile(absPath+".html", []byte(prettyVersion), 0644)
+		ioutil.WriteFile(absPath+".html", []byte(prettyVersion), 0644)
 	}
 
 	err := filepath.Walk("./testdata/ok/", func(path string, info os.FileInfo, err error) error {

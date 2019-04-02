@@ -78,6 +78,8 @@ type Token struct {
 	DataAtom atom.Atom
 	Data     string
 	Attr     []Attribute
+	Column   int
+	Line     int
 }
 
 // tagString returns a string representation of a tag Token's Data and Attr.
@@ -169,6 +171,14 @@ type Tokenizer struct {
 	convertNUL bool
 	// allowCDATA is whether CDATA sections are allowed in the current context.
 	allowCDATA bool
+	// tokenLine is the line that tt is found on.
+	tokenLine int
+	// tokenColumn is the column that tt starts on.
+	tokenColumn int
+	// currentLine is the ongoing temporary variable for tracking lines.
+	currentLine int
+	// currentColumn is the ongoing temporary variable for tracking columns.
+	currentColumn int
 }
 
 // AllowCDATA sets whether or not the tokenizer recognizes <![CDATA[foo]]> as
@@ -283,6 +293,15 @@ func (z *Tokenizer) readByte() byte {
 		z.err = ErrBufferExceeded
 		return 0
 	}
+
+	// Increment the line and column tracker
+	if x == '\n' {
+		z.currentLine++
+		z.currentColumn = 0
+	} else {
+		z.currentColumn++
+	}
+
 	return x
 }
 
@@ -948,11 +967,15 @@ func (z *Tokenizer) readTagAttrVal() {
 
 // Next scans the next token and returns its type.
 func (z *Tokenizer) Next() TokenType {
+	z.tokenLine = z.currentLine
+	z.tokenColumn = z.currentColumn
+
 	z.raw.start = z.raw.end
 	z.data.start = z.raw.end
 	z.data.end = z.raw.end
 	if z.err != nil {
 		z.tt = ErrorToken
+
 		return z.tt
 	}
 	if z.rawTag != "" {
@@ -1164,7 +1187,7 @@ func (z *Tokenizer) TagAttr() (key, val []byte, moreAttr bool) {
 // Token returns the current Token. The result's Data and Attr values remain
 // valid after subsequent Next calls.
 func (z *Tokenizer) Token() Token {
-	t := Token{Type: z.tt}
+	t := Token{Type: z.tt, Line: z.tokenLine, Column: z.tokenColumn}
 	switch z.tt {
 	case TextToken, CommentToken, DoctypeToken:
 		t.Data = string(z.Text())

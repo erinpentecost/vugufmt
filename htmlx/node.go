@@ -44,6 +44,14 @@ type Node struct {
 	Data      string
 	Namespace string
 	Attr      []Attribute
+	// Column is the original location in the source string.
+	// Once Nodes start moving around outside of parsing, it
+	// can't be trusted.
+	Column int
+	// Line is the original location in the source string.
+	// Once Nodes start moving around outside of parsing, it
+	// can't be trusted.
+	Line int
 }
 
 // InsertBefore inserts newChild as a child of n, immediately before oldChild
@@ -139,6 +147,8 @@ func (n *Node) clone() *Node {
 		DataAtom: n.DataAtom,
 		Data:     n.Data,
 		Attr:     make([]Attribute, len(n.Attr)),
+		Line:     n.Line,
+		Column:   n.Column,
 	}
 	copy(m.Attr, n.Attr)
 	return m

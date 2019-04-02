@@ -20,7 +20,7 @@ func (e FmtError) Error() string {
 }
 
 // fromGoFmt reads stdErr output from gofmt and parses it all out (if able)
-func fromGoFmt(stdErr string, lineOffset int) FmtError {
+func fromGoFmt(stdErr string) FmtError {
 	splitUp := strings.SplitN(stdErr, ":", 4)
 
 	if len(splitUp) != 4 {

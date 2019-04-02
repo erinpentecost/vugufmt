@@ -54,7 +54,7 @@ func TestGoFmtError(t *testing.T) {
 	var buf bytes.Buffer
 	err := runGoFmt(strings.NewReader(testCode), &buf, false)
 	assert.Error(t, err, buf.String())
-	fmtErr := fromGoFmt(buf.String(), 0)
+	fmtErr := fromGoFmt(buf.String())
 	assert.Equal(t, 3, fmtErr.Line)
 	assert.Equal(t, 9, fmtErr.Column)
 }

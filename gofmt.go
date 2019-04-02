@@ -1,6 +1,8 @@
 package vugufmt
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -27,9 +29,11 @@ func runGoFmt(input io.Reader, output io.Writer, simplify bool) error {
 		cmd.Args = []string{"-s"}
 	}
 
+	var resBuff bytes.Buffer
+
 	// I need to capture output
-	cmd.Stderr = output
-	cmd.Stdout = output
+	cmd.Stderr = &resBuff
+	cmd.Stdout = &resBuff
 
 	// also set up input pipe
 	cmd.Stdin = input
@@ -43,8 +47,15 @@ func runGoFmt(input io.Reader, output io.Writer, simplify bool) error {
 	}
 
 	// wait until gofmt is done
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("go fmt error %v", err)
+	err := cmd.Wait()
+
+	// Get all the output
+	res := resBuff.Bytes()
+	// Send the output to the output buffer
+	io.Copy(output, bytes.NewReader(res))
+	// Wrap the output in an error.
+	if err != nil {
+		return errors.New(string(res))
 	}
 
 	return nil

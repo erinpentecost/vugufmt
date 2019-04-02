@@ -2,6 +2,7 @@ package vugufmt
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -42,7 +43,7 @@ func TestOptsGoImports(t *testing.T) {
 
 func TestVuguFmtNoError(t *testing.T) {
 	formatter := NewFormatter(UseGoFmt(false))
-	fmt := func(f string) {
+	fmtr := func(f string) {
 		// Need to un-relativize the paths
 		absPath, err := filepath.Abs(f)
 
@@ -57,7 +58,7 @@ func TestVuguFmtNoError(t *testing.T) {
 		assert.NoError(t, err, f)
 		// run gofmt on it
 		var buf bytes.Buffer
-		assert.NoError(t, formatter.Format("", strings.NewReader(testFileString), &buf), f)
+		assert.NoError(t, formatter.Format(absPath, strings.NewReader(testFileString), &buf), f)
 		prettyVersion := buf.String()
 
 		// make sure nothing changed!
@@ -68,7 +69,39 @@ func TestVuguFmtNoError(t *testing.T) {
 	}
 
 	err := filepath.Walk("./testdata/ok/", func(path string, info os.FileInfo, err error) error {
-		fmt(path)
+		fmtr(path)
+		return nil
+	})
+
+	assert.NoError(t, err)
+}
+
+func TestUncompilableGo(t *testing.T) {
+	fmt.Println("hello?")
+	formatter := NewFormatter(UseGoFmt(false))
+	fmtr := func(f string) {
+		// Need to un-relativize the paths
+		absPath, err := filepath.Abs(f)
+
+		if filepath.Ext(absPath) != ".vugu" {
+			return
+		}
+
+		assert.NoError(t, err, f)
+		// get a handle on the file
+		testFile, err := ioutil.ReadFile(absPath)
+		testFileString := string(testFile)
+		assert.NoError(t, err, f)
+		// run gofmt on it
+		var buf bytes.Buffer
+		err = formatter.Format("oknow", strings.NewReader(testFileString), &buf)
+		assert.Error(t, err, f)
+		// confirm the offset is correct!
+		assert.Equal(t, "oknow:46:22: expected ';', found broken", err.Error(), f)
+	}
+
+	err := filepath.Walk("./testdata/bad/badgo.vugu", func(path string, info os.FileInfo, err error) error {
+		fmtr(path)
 		return nil
 	})
 

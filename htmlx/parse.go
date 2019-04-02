@@ -212,6 +212,15 @@ loop:
 // addChild adds a child node n to the top element, and pushes n onto the stack
 // of open elements if it is an element node.
 func (p *parser) addChild(n *Node) {
+	// TODO: This is the wrong spot for this code,
+	// and I'm sure there are cases where we are not
+	// adding a node based on p.tok. In those cases,
+	// I'm sticking in the wrong values for line and
+	// column. This is lazy.
+	n.Line = p.tok.Line
+	n.Column = p.tok.Column
+
+	// Actually add the child into the stack now...
 	if p.shouldFosterParent() {
 		p.fosterParent(n)
 	} else {

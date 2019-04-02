@@ -47,15 +47,15 @@ func NewFormatter(opts ...func(*Formatter)) *Formatter {
 // filename is optional, but helps with generating useful output.
 func (f *Formatter) Format(filename string, input io.Reader, output io.Writer) error {
 	if filename == "" {
-		filename = "stdin"
+		filename = "<not set>"
 	}
 	// First process the html bits
 	doc, err := htmlx.Parse(input)
 	if err != nil {
 		return fmt.Errorf("failed to parse HTML5: %v", err)
 	}
-	if err := f.parseHTML(doc); err != nil {
-		return fmt.Errorf("failed to walk HTML5: %v", err)
+	if err := f.parseHTML(filename, doc); err != nil {
+		return err
 	}
 
 	// At this point, re-print the parse tree.
@@ -82,7 +82,7 @@ func (f *Formatter) Format(filename string, input io.Reader, output io.Writer) e
 	return renderBody(doc)
 }
 
-func (f *Formatter) parseHTML(n *htmlx.Node) error {
+func (f *Formatter) parseHTML(filename string, n *htmlx.Node) error {
 	// Clean up script blocks!
 	if n.Type == htmlx.TextNode && n.Parent.Type == htmlx.ElementNode && n.Parent.Data == "script" {
 		scriptType := ""
@@ -95,7 +95,11 @@ func (f *Formatter) parseHTML(n *htmlx.Node) error {
 
 					// Exit out on error.
 					if err := scriptFmt(strings.NewReader(n.Data), &buf); err != nil {
-						return err
+						fmt.Printf("Error on node: %+v\n", n)
+						wrappedErr := fromGoFmt(err.Error())
+						wrappedErr.Line += n.Line
+						wrappedErr.FileName = filename
+						return wrappedErr
 					}
 
 					// Save over Data with the nice version.
@@ -108,7 +112,7 @@ func (f *Formatter) parseHTML(n *htmlx.Node) error {
 
 	// Continue on with the recursive pass.
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if err := f.parseHTML(c); err != nil {
+		if err := f.parseHTML(filename, c); err != nil {
 			return err
 		}
 	}
@@ -122,7 +126,7 @@ func (f *Formatter) parseHTML(n *htmlx.Node) error {
 // filename is optional, but helps with generating useful output.
 func (f *Formatter) Diff(filename string, input io.Reader, output io.Writer) (bool, error) {
 	if filename == "" {
-		filename = "stdin"
+		filename = "<not set>"
 	}
 
 	var resBuff bytes.Buffer

@@ -2236,7 +2236,7 @@ func (p *parser) parse() error {
 		if p.tok.Type == ErrorToken {
 			err = p.tokenizer.Err()
 			if err != nil && err != io.EOF {
-				return err
+				return fmt.Errorf("html:%v:%v: %s", p.tok.Line, p.tok.Column, err.Error())
 			}
 		}
 		p.parseCurrentToken()

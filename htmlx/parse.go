@@ -49,6 +49,16 @@ type parser struct {
 	// context is the context element when parsing an HTML fragment
 	// (section 12.4).
 	context *Node
+	// err is an error that originated during parsing, but not tokenization
+	err error
+}
+
+// setError sets p.err if it is not already set.
+func (p *parser) setError(token Token, method string) {
+	if p.err == nil {
+		p.err = fmt.Errorf("html:%v:%v: %s parse issue",
+			token.Line, token.Column, method)
+	}
 }
 
 func (p *parser) top() *Node {
@@ -1151,6 +1161,7 @@ func inBodyIM(p *parser) bool {
 			Data: p.tok.Data,
 		})
 	case ErrorToken:
+		//p.setError(p.tok, "inBodyIM")
 		// TODO: remove this divergence from the HTML5 spec.
 		if len(p.templateStack) > 0 {
 			p.im = inTemplateIM
@@ -1321,6 +1332,7 @@ func (p *parser) inBodyEndTagOther(tagAtom a.Atom, tagName string) {
 func textIM(p *parser) bool {
 	switch p.tok.Type {
 	case ErrorToken:
+		p.setError(p.tok, "textIM")
 		p.oe.pop()
 	case TextToken:
 		d := p.tok.Data
@@ -1444,6 +1456,7 @@ func inTableIM(p *parser) bool {
 		// Ignore the token.
 		return true
 	case ErrorToken:
+		p.setError(p.tok, "ErrorToken")
 		return inBodyIM(p)
 	}
 
@@ -1548,6 +1561,7 @@ func inColumnGroupIM(p *parser) bool {
 			return inHeadIM(p)
 		}
 	case ErrorToken:
+		p.setError(p.tok, "inColumnGroupIM")
 		return inBodyIM(p)
 	}
 	if p.oe.top().DataAtom != a.Colgroup {
@@ -1784,6 +1798,7 @@ func inSelectIM(p *parser) bool {
 		// Ignore the token.
 		return true
 	case ErrorToken:
+		p.setError(p.tok, "inSelectIM")
 		return inBodyIM(p)
 	}
 
@@ -1861,6 +1876,7 @@ func inTemplateIM(p *parser) bool {
 			return true
 		}
 	case ErrorToken:
+		p.setError(p.tok, "inTemplateIM")
 		if !p.oe.contains(a.Template) {
 			// Ignore the token.
 			return true
@@ -1887,6 +1903,7 @@ func inTemplateIM(p *parser) bool {
 func afterBodyIM(p *parser) bool {
 	switch p.tok.Type {
 	case ErrorToken:
+		//p.setError(p.tok, "afterBodyIM")
 		// Stop parsing.
 		return true
 	case TextToken:
@@ -2014,6 +2031,7 @@ func afterFramesetIM(p *parser) bool {
 func afterAfterBodyIM(p *parser) bool {
 	switch p.tok.Type {
 	case ErrorToken:
+		//p.setError(p.tok, "AfterBodyIM")
 		// Stop parsing.
 		return true
 	case TextToken:
@@ -2181,6 +2199,7 @@ func (p *parser) inForeignContent() bool {
 		return false
 	}
 	if p.tok.Type == ErrorToken {
+		p.setError(p.tok, "inForeignContent")
 		return false
 	}
 	return true
@@ -2236,7 +2255,7 @@ func (p *parser) parse() error {
 		if p.tok.Type == ErrorToken {
 			err = p.tokenizer.Err()
 			if err != nil && err != io.EOF {
-				return fmt.Errorf("html:%v:%v: %s", p.tok.Line, p.tok.Column, err.Error())
+				return fmt.Errorf("html:%v:%v: tokenization problem %s", p.tok.Line, p.tok.Column, err.Error())
 			}
 		}
 		p.parseCurrentToken()
@@ -2268,6 +2287,9 @@ func Parse(r io.Reader) (*Node, error) {
 	err := p.parse()
 	if err != nil {
 		return nil, err
+	}
+	if p.err != nil {
+		return nil, p.err
 	}
 	return p.doc, nil
 }

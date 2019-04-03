@@ -2,7 +2,6 @@ package vugufmt
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -10,11 +9,13 @@ import (
 	"strings"
 
 	"github.com/erinpentecost/vugufmt/htmlx"
+
+	"golang.org/x/net/html/atom"
 )
 
 // Formatter allows you to format vugu files.
 type Formatter struct {
-	// FmtScripts maps script blocks to formatting
+	// ScriptFormatters maps script blocks to formatting
 	// functions.
 	// For each type of script block,
 	// we can run it through the supplied function.
@@ -23,7 +24,8 @@ type Formatter struct {
 	// You can add your own custom one for JS, for
 	// example. If you want to use gofmt or goimports,
 	// see how to apply options in NewFormatter.
-	FmtScripts map[string](func(io.Reader, io.Writer) error)
+	ScriptFormatters map[string]func([]byte) ([]byte, error)
+	StyleFormatter   func([]byte) ([]byte, error)
 }
 
 // NewFormatter creates a new formatter.
@@ -31,7 +33,7 @@ type Formatter struct {
 // Pass in vugufmt.UseGoImports to use goimports.
 func NewFormatter(opts ...func(*Formatter)) *Formatter {
 	f := &Formatter{
-		FmtScripts: make(map[string](func(io.Reader, io.Writer) error)),
+		ScriptFormatters: make(map[string](func([]byte) ([]byte, error))),
 	}
 
 	// apply options
@@ -42,81 +44,144 @@ func NewFormatter(opts ...func(*Formatter)) *Formatter {
 	return f
 }
 
-// Format runs vugufmt on input, and sends a pretty version of
-// it to output. If there is an error, throw away output!
-// filename is optional, but helps with generating useful output.
-func (f *Formatter) Format(filename string, input io.Reader, output io.Writer) error {
-	if filename == "" {
-		filename = "<not set>"
+// FormatScript formats script text nodes.
+func (f *Formatter) FormatScript(scriptType string, scriptContent []byte) ([]byte, error) {
+	if f.ScriptFormatters == nil {
+		return scriptContent, nil
 	}
-	// First process the html bits
-	doc, err := htmlx.Parse(input)
-	if err != nil {
-		return fmt.Errorf("failed to parse HTML5: %v", err)
+	fn, ok := f.ScriptFormatters[strings.ToLower(scriptType)]
+	if !ok {
+		return scriptContent, nil
 	}
-	if err := f.parseHTML(filename, doc); err != nil {
-		return err
-	}
-
-	// At this point, re-print the parse tree.
-	// I only want to print the body portion.
-	var renderBody func(n *htmlx.Node) error
-
-	renderBody = func(n *htmlx.Node) error {
-		if n.Data == "body" {
-			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				if err := htmlx.Render(output, c); err != nil {
-					return fmt.Errorf("failed to render HTML5: %v", err)
-				}
-			}
-		} else if n.Data == "head" {
-			return errors.New("head tag is forbidden")
-		} else {
-			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				renderBody(c)
-			}
-		}
-		return nil
-	}
-
-	return renderBody(doc)
+	return fn(scriptContent)
 }
 
-func (f *Formatter) parseHTML(filename string, n *htmlx.Node) error {
-	// Clean up script blocks!
-	if n.Type == htmlx.TextNode && n.Parent.Type == htmlx.ElementNode && n.Parent.Data == "script" {
-		scriptType := ""
-		for _, tag := range n.Parent.Attr {
-			if tag.Key == "type" {
-				scriptType = tag.Val
-				// Handle the script type formatting.
-				if scriptFmt, ok := f.FmtScripts[scriptType]; ok {
-					var buf bytes.Buffer
+// FormatStyle formats script text nodes.
+func (f *Formatter) FormatStyle(styleContent []byte) ([]byte, error) {
+	if f.StyleFormatter == nil {
+		return styleContent, nil
+	}
+	return f.StyleFormatter(styleContent)
+}
 
-					// Exit out on error.
-					if err := scriptFmt(strings.NewReader(n.Data), &buf); err != nil {
-						fmt.Printf("Error on node: %+v\n", n)
+// FormatHTML formats script and css nodes.
+func (f *Formatter) FormatHTML(filename string, in io.Reader, out io.Writer) error {
+	izer := htmlx.NewTokenizer(in)
+	ts := tokenStack{}
+
+	for {
+		curTokType := izer.Next()
+		curTok := izer.Token()
+		// quit on errors.
+		if curTokType == htmlx.ErrorToken {
+			if err := izer.Err(); err != nil {
+				if err != io.EOF {
+					return fmt.Errorf("%s:%v:%v: tokenization problem %s",
+						filename, curTok.Line, curTok.Column, err.Error())
+				}
+				return nil
+			}
+		}
+		raw := izer.RawData()
+		// add or remove tokens from the stack
+		switch curTokType {
+		case htmlx.StartTagToken:
+			ts.insert(0, &curTok)
+			out.Write(raw)
+		case htmlx.EndTagToken:
+			lastPushed := ts.pop()
+			if lastPushed.Type != curTokType {
+				return fmt.Errorf("%s:%v:%v: mismatched ending tag (expected %s, found %s)",
+					filename, curTok.Line, curTok.Column, lastPushed.Type, curTokType)
+			}
+			out.Write(raw)
+		case htmlx.TextToken:
+			parent := ts.top()
+			if parent == nil {
+				return fmt.Errorf("%s:%v:%v: orphaned text node",
+					filename, curTok.Line, curTok.Column)
+			}
+			if parent.DataAtom == atom.Script {
+				// hey we are in a script text node
+				fmtr, err := f.FormatScript(parent.Data, raw)
+				// Exit out on error.
+				if err != nil {
+					// super hacky line offset edit
+					if strings.Contains(parent.Data, "application/x-go") {
 						wrappedErr := fromGoFmt(err.Error())
-						wrappedErr.Line += n.Line
+						wrappedErr.Line += curTok.Line
 						wrappedErr.FileName = filename
 						return wrappedErr
 					}
-
-					// Save over Data with the nice version.
-					n.Data = buf.String()
+					return fmt.Errorf("%s:%v:%v: %s",
+						filename, curTok.Line, curTok.Column, err.Error())
 				}
-				break
+				out.Write(fmtr)
+			} else if parent.DataAtom == atom.Style {
+				// hey we are in a CSS text node
+				fmtr, err := f.FormatStyle(raw)
+				if err != nil {
+					return fmt.Errorf("%s:%v:%v: %s",
+						filename, curTok.Line, curTok.Column, err.Error())
+				}
+				out.Write(fmtr)
+			} else {
+				// we are in some other text node we don't care about.
+				out.Write(raw)
 			}
+		default:
+			out.Write(raw)
 		}
 	}
+}
 
-	// Continue on with the recursive pass.
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if err := f.parseHTML(filename, c); err != nil {
-			return err
-		}
+// tokenStack is a stack of nodes.
+type tokenStack []*htmlx.Token
+
+// pop pops the stack. It will panic if s is empty.
+func (s *tokenStack) pop() *htmlx.Token {
+	i := len(*s)
+	n := (*s)[i-1]
+	*s = (*s)[:i-1]
+	return n
+}
+
+// top returns the most recently pushed node, or nil if s is empty.
+func (s *tokenStack) top() *htmlx.Token {
+	if i := len(*s); i > 0 {
+		return (*s)[i-1]
 	}
 	return nil
+}
+
+// index returns the index of the top-most occurrence of n in the stack, or -1
+// if n is not present.
+func (s *tokenStack) index(n *htmlx.Token) int {
+	for i := len(*s) - 1; i >= 0; i-- {
+		if (*s)[i] == n {
+			return i
+		}
+	}
+	return -1
+}
+
+// insert inserts a node at the given index.
+func (s *tokenStack) insert(i int, n *htmlx.Token) {
+	(*s) = append(*s, nil)
+	copy((*s)[i+1:], (*s)[i:])
+	(*s)[i] = n
+}
+
+// remove removes a node from the stack. It is a no-op if n is not present.
+func (s *tokenStack) remove(n *htmlx.Token) {
+	i := s.index(n)
+	if i == -1 {
+		return
+	}
+	copy((*s)[i:], (*s)[i+1:])
+	j := len(*s) - 1
+	(*s)[j] = nil
+	*s = (*s)[:j]
 }
 
 // Diff will show differences between input and what
@@ -134,7 +199,7 @@ func (f *Formatter) Diff(filename string, input io.Reader, output io.Writer) (bo
 	if err != nil {
 		return false, err
 	}
-	if err := f.Format(filename, bytes.NewReader(src), &resBuff); err != nil {
+	if err := f.FormatHTML(filename, bytes.NewReader(src), &resBuff); err != nil {
 		return false, err
 	}
 	res := resBuff.Bytes()

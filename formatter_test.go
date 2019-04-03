@@ -2,7 +2,6 @@ package vugufmt
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -95,7 +94,9 @@ func TestUncompilableGo(t *testing.T) {
 		err = formatter.FormatHTML("oknow", strings.NewReader(testFileString), &buf)
 		assert.Error(t, err, f)
 		// confirm the offset is correct!
-		assert.Equal(t, "oknow:46:22: expected ';', found broken", err.Error(), f)
+		if err != nil {
+			assert.Equal(t, "oknow:46:22: expected ';', found broken", err.Error(), f)
+		}
 	}
 
 	err := filepath.Walk("./testdata/bad/badgo.vugu", func(path string, info os.FileInfo, err error) error {
@@ -119,7 +120,7 @@ func TestEscaping(t *testing.T) {
 
 func TestBadHTML(t *testing.T) {
 	// I'd like the > to not be escaped into &gt;
-	testCode := "<html><head></head><body>></body></html>"
+	testCode := "<html><head></head><body><oh no></body></html>"
 	formatter := NewFormatter(UseGoFmt(false))
 	// run gofmt on it
 	var buf bytes.Buffer
@@ -127,6 +128,4 @@ func TestBadHTML(t *testing.T) {
 	assert.Error(t, err, testCode)
 	prettyVersion := buf.String()
 	assert.NotEqual(t, testCode, prettyVersion)
-
-	fmt.Printf("%+v %s", err, testCode)
 }

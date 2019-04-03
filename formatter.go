@@ -69,9 +69,16 @@ func (f *Formatter) FormatHTML(filename string, in io.Reader, out io.Writer) err
 	izer := htmlx.NewTokenizer(in)
 	ts := tokenStack{}
 
+	curTok := htmlx.Token{}
 	for {
 		curTokType := izer.Next()
-		curTok := izer.Token()
+		if curTokType == htmlx.ErrorToken {
+			if izer.Err() == io.EOF {
+				return nil
+			}
+			return izer.Err()
+		}
+
 		// quit on errors.
 		if curTokType == htmlx.ErrorToken {
 			if err := izer.Err(); err != nil {
@@ -82,26 +89,29 @@ func (f *Formatter) FormatHTML(filename string, in io.Reader, out io.Writer) err
 				return nil
 			}
 		}
+
+		curTok := izer.Token()
+
 		raw := izer.RawData()
 		// add or remove tokens from the stack
 		switch curTokType {
 		case htmlx.StartTagToken:
-			ts.insert(0, &curTok)
+			ts.push(&curTok)
 			out.Write(raw)
 		case htmlx.EndTagToken:
 			lastPushed := ts.pop()
-			if lastPushed.Type != curTokType {
+			if lastPushed.DataAtom != curTok.DataAtom {
 				return fmt.Errorf("%s:%v:%v: mismatched ending tag (expected %s, found %s)",
-					filename, curTok.Line, curTok.Column, lastPushed.Type, curTokType)
+					filename, curTok.Line, curTok.Column, lastPushed.Data, curTok.Data)
 			}
 			out.Write(raw)
 		case htmlx.TextToken:
 			parent := ts.top()
 			if parent == nil {
-				return fmt.Errorf("%s:%v:%v: orphaned text node",
-					filename, curTok.Line, curTok.Column)
-			}
-			if parent.DataAtom == atom.Script {
+				out.Write(raw)
+				//return fmt.Errorf("%s:%v:%v: orphaned text node",
+				//	filename, curTok.Line, curTok.Column)
+			} else if parent.DataAtom == atom.Script {
 				// hey we are in a script text node
 				fmtr, err := f.FormatScript(parent.Data, raw)
 				// Exit out on error.
@@ -144,6 +154,13 @@ func (s *tokenStack) pop() *htmlx.Token {
 	n := (*s)[i-1]
 	*s = (*s)[:i-1]
 	return n
+}
+
+// push inserts a node
+func (s *tokenStack) push(n *htmlx.Token) {
+	i := len(*s)
+	(*s) = append(*s, nil)
+	(*s)[i] = n
 }
 
 // top returns the most recently pushed node, or nil if s is empty.

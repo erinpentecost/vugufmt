@@ -181,6 +181,11 @@ type Tokenizer struct {
 	currentColumn int
 }
 
+// RawData returns the raw bytes for the current token
+func (z *Tokenizer) RawData() []byte {
+	return z.buf[z.raw.start:z.raw.end]
+}
+
 // AllowCDATA sets whether or not the tokenizer recognizes <![CDATA[foo]]> as
 // the text "foo". The default value is false, which means to recognize it as
 // a bogus comment "<!-- [CDATA[foo]] -->" instead.
@@ -1198,6 +1203,7 @@ func (z *Tokenizer) Token() Token {
 			key, val, moreAttr = z.TagAttr()
 			t.Attr = append(t.Attr, Attribute{"", atom.String(key), string(val)})
 		}
+		t.Data = string(name)
 		if a := atom.Lookup(name); a != 0 {
 			t.DataAtom, t.Data = a, a.String()
 		} else {

@@ -2,9 +2,7 @@ package vugufmt
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 )
@@ -15,13 +13,13 @@ import (
 func UseGoFmt(simplifyAST bool) func(*Formatter) {
 
 	return func(f *Formatter) {
-		f.FmtScripts["application/x-go"] = func(input io.Reader, output io.Writer) error {
-			return runGoFmt(input, output, simplifyAST)
+		f.ScriptFormatters["application/x-go"] = func(input []byte) ([]byte, *FmtError) {
+			return runGoFmt(input, simplifyAST)
 		}
 	}
 }
 
-func runGoFmt(input io.Reader, output io.Writer, simplify bool) error {
+func runGoFmt(input []byte, simplify bool) ([]byte, *FmtError) {
 	// build up command to run
 	cmd := exec.Command("gofmt")
 
@@ -29,21 +27,21 @@ func runGoFmt(input io.Reader, output io.Writer, simplify bool) error {
 		cmd.Args = []string{"-s"}
 	}
 
-	var resBuff bytes.Buffer
+	var resBuff, errBuff bytes.Buffer
 
 	// I need to capture output
-	cmd.Stderr = &resBuff
+	cmd.Stderr = &errBuff
 	cmd.Stdout = &resBuff
 
 	// also set up input pipe
-	cmd.Stdin = input
+	cmd.Stdin = bytes.NewReader(input)
 
 	// copy down environment variables
 	cmd.Env = os.Environ()
 
 	// start gofmt
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("can't run gofmt: %s", err)
+		return input, &FmtError{Msg: fmt.Sprintf("can't run gofmt: %s", err.Error())}
 	}
 
 	// wait until gofmt is done
@@ -51,12 +49,11 @@ func runGoFmt(input io.Reader, output io.Writer, simplify bool) error {
 
 	// Get all the output
 	res := resBuff.Bytes()
-	// Send the output to the output buffer
-	io.Copy(output, bytes.NewReader(res))
+
 	// Wrap the output in an error.
 	if err != nil {
-		return errors.New(string(res))
+		return input, fromGoFmt(string(errBuff.String()))
 	}
 
-	return nil
+	return res, nil
 }

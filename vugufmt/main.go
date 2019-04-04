@@ -89,7 +89,7 @@ func isVuguFile(f os.FileInfo) bool {
 }
 
 func report(err error) {
-	fmt.Fprintf(os.Stderr, err.Error())
+	fmt.Fprintf(os.Stderr, "%s\n", strings.TrimSpace(err.Error()))
 	exitCode = 2
 }
 
@@ -121,7 +121,7 @@ func processFile(filename string, in io.Reader, out io.Writer) error {
 	formatter := vugufmt.NewFormatter(vugufmt.UseGoFmt(*simplifyAST))
 
 	if !*list && !*doDiff {
-		if err := formatter.Format(filename, bytes.NewReader(src), &resBuff); err != nil {
+		if err := formatter.FormatHTML(filename, bytes.NewReader(src), &resBuff); err != nil {
 			return err
 		}
 		res := resBuff.Bytes()

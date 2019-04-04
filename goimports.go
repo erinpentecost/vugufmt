@@ -2,21 +2,19 @@ package vugufmt
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 )
 
 // UseGoImports sets the formatter to use goimports on x-go blocks.
 func UseGoImports(f *Formatter) {
-	f.FmtScripts["application/x-go"] = func(input io.Reader, output io.Writer) error {
-		return runGoImports(input, output)
+	f.ScriptFormatters["application/x-go"] = func(input []byte) ([]byte, *FmtError) {
+		return runGoImports(input)
 	}
 }
 
-func runGoImports(input io.Reader, output io.Writer) error {
+func runGoImports(input []byte) ([]byte, *FmtError) {
 	// build up command to run
 	cmd := exec.Command("goimports")
 
@@ -27,14 +25,14 @@ func runGoImports(input io.Reader, output io.Writer) error {
 	cmd.Stdout = &resBuff
 
 	// also set up input pipe
-	cmd.Stdin = input
+	cmd.Stdin = bytes.NewReader(input)
 
 	// copy down environment variables
 	cmd.Env = os.Environ()
 
 	// start gofmt
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("can't run goimports: %s", err)
+		return input, &FmtError{Msg: fmt.Sprintf("can't run goimports: %s", err.Error())}
 	}
 
 	// wait until gofmt is done
@@ -42,12 +40,11 @@ func runGoImports(input io.Reader, output io.Writer) error {
 
 	// Get all the output
 	res := resBuff.Bytes()
-	// Send the output to the output buffer
-	io.Copy(output, bytes.NewReader(res))
+
 	// Wrap the output in an error.
 	if err != nil {
-		return errors.New(string(res))
+		return input, fromGoFmt(string(res))
 	}
 
-	return nil
+	return res, nil
 }

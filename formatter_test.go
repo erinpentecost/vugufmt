@@ -2,8 +2,6 @@ package vugufmt
 
 import (
 	"bytes"
-	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -15,30 +13,30 @@ import (
 
 func TestOptsCustom(t *testing.T) {
 	jsFormat := func(f *Formatter) {
-		f.FmtScripts["js"] = func(input io.Reader, output io.Writer) error {
-			return nil
+		f.ScriptFormatters["js"] = func(input []byte) ([]byte, *FmtError) {
+			return nil, nil
 		}
 	}
 	formatter := NewFormatter(jsFormat)
-	assert.NotNil(t, formatter.FmtScripts["js"])
+	assert.NotNil(t, formatter.ScriptFormatters["js"])
 }
 
 func TestOptsGoFmt(t *testing.T) {
 	gofmt := UseGoFmt(false)
 	formatter := NewFormatter(gofmt)
-	assert.NotNil(t, formatter.FmtScripts["application/x-go"])
+	assert.NotNil(t, formatter.ScriptFormatters["application/x-go"])
 }
 
 func TestOptsGoFmtSimple(t *testing.T) {
 	gofmt := UseGoFmt(true)
 	formatter := NewFormatter(gofmt)
-	assert.NotNil(t, formatter.FmtScripts["application/x-go"])
+	assert.NotNil(t, formatter.ScriptFormatters["application/x-go"])
 }
 
 func TestOptsGoImports(t *testing.T) {
 	goimports := UseGoImports
 	formatter := NewFormatter(goimports)
-	assert.NotNil(t, goimports, formatter.FmtScripts["application/x-go"])
+	assert.NotNil(t, goimports, formatter.ScriptFormatters["application/x-go"])
 }
 
 func TestVuguFmtNoError(t *testing.T) {
@@ -58,7 +56,8 @@ func TestVuguFmtNoError(t *testing.T) {
 		assert.NoError(t, err, f)
 		// run gofmt on it
 		var buf bytes.Buffer
-		assert.NoError(t, formatter.Format(absPath, strings.NewReader(testFileString), &buf), f)
+		err = formatter.FormatHTML(absPath, strings.NewReader(testFileString), &buf)
+		assert.Nil(t, err, f)
 		prettyVersion := buf.String()
 
 		// make sure nothing changed!
@@ -77,7 +76,6 @@ func TestVuguFmtNoError(t *testing.T) {
 }
 
 func TestUncompilableGo(t *testing.T) {
-	fmt.Println("hello?")
 	formatter := NewFormatter(UseGoFmt(false))
 	fmtr := func(f string) {
 		// Need to un-relativize the paths
@@ -94,18 +92,15 @@ func TestUncompilableGo(t *testing.T) {
 		assert.NoError(t, err, f)
 		// run gofmt on it
 		var buf bytes.Buffer
-		err = formatter.Format("oknow", strings.NewReader(testFileString), &buf)
-		assert.Error(t, err, f)
+		ferr := formatter.FormatHTML("oknow", strings.NewReader(testFileString), &buf)
+		assert.NotNil(t, ferr, f)
 		// confirm the offset is correct!
-		assert.Equal(t, "oknow:46:22: expected ';', found broken", err.Error(), f)
+		assert.Equal(t, 46, ferr.Line, f)
+		assert.Equal(t, 22, ferr.Column, f)
 	}
 
-	err := filepath.Walk("./testdata/bad/badgo.vugu", func(path string, info os.FileInfo, err error) error {
-		fmtr(path)
-		return nil
-	})
+	fmtr("./testdata/bad/badgo.vugu")
 
-	assert.NoError(t, err)
 }
 
 func TestEscaping(t *testing.T) {
@@ -114,7 +109,19 @@ func TestEscaping(t *testing.T) {
 	formatter := NewFormatter(UseGoFmt(false))
 	// run gofmt on it
 	var buf bytes.Buffer
-	assert.NoError(t, formatter.Format("", strings.NewReader(testCode), &buf), testCode)
+	assert.Nil(t, formatter.FormatHTML("", strings.NewReader(testCode), &buf), testCode)
 	prettyVersion := buf.String()
 	assert.Equal(t, testCode, prettyVersion)
+}
+
+func TestBadHTML(t *testing.T) {
+	// I'd like the > to not be escaped into &gt;
+	testCode := "<html><head></head><body><oh no></body></html>"
+	formatter := NewFormatter(UseGoFmt(false))
+	// run gofmt on it
+	var buf bytes.Buffer
+	err := formatter.FormatHTML("", strings.NewReader(testCode), &buf)
+	assert.Error(t, err, testCode)
+	prettyVersion := buf.String()
+	assert.NotEqual(t, testCode, prettyVersion)
 }

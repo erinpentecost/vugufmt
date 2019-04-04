@@ -7,3 +7,7 @@ require (
 	golang.org/x/net v0.0.0-20190328230028-74de082e2cca
 	golang.org/x/text v0.3.0
 )
+
+replace github.com/erinpentecost/vugufmt/htmlx => ./htmlx
+
+replace github.com/erinpentecost/vugufmt/htmlx/atom => ./htmlx/atom

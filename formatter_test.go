@@ -13,7 +13,7 @@ import (
 
 func TestOptsCustom(t *testing.T) {
 	jsFormat := func(f *Formatter) {
-		f.ScriptFormatters["js"] = func(input []byte) ([]byte, error) {
+		f.ScriptFormatters["js"] = func(input []byte) ([]byte, *FmtError) {
 			return nil, nil
 		}
 	}
@@ -56,7 +56,8 @@ func TestVuguFmtNoError(t *testing.T) {
 		assert.NoError(t, err, f)
 		// run gofmt on it
 		var buf bytes.Buffer
-		assert.NoError(t, formatter.FormatHTML(absPath, strings.NewReader(testFileString), &buf), f)
+		err = formatter.FormatHTML(absPath, strings.NewReader(testFileString), &buf)
+		assert.Nil(t, err, f)
 		prettyVersion := buf.String()
 
 		// make sure nothing changed!

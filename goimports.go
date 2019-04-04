@@ -2,7 +2,6 @@ package vugufmt
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,12 +9,12 @@ import (
 
 // UseGoImports sets the formatter to use goimports on x-go blocks.
 func UseGoImports(f *Formatter) {
-	f.ScriptFormatters["application/x-go"] = func(input []byte) ([]byte, error) {
+	f.ScriptFormatters["application/x-go"] = func(input []byte) ([]byte, *FmtError) {
 		return runGoImports(input)
 	}
 }
 
-func runGoImports(input []byte) ([]byte, error) {
+func runGoImports(input []byte) ([]byte, *FmtError) {
 	// build up command to run
 	cmd := exec.Command("goimports")
 
@@ -33,7 +32,7 @@ func runGoImports(input []byte) ([]byte, error) {
 
 	// start gofmt
 	if err := cmd.Start(); err != nil {
-		return input, fmt.Errorf("can't run goimports: %s", err)
+		return input, &FmtError{Msg: fmt.Sprintf("can't run goimports: %s", err.Error())}
 	}
 
 	// wait until gofmt is done
@@ -44,7 +43,7 @@ func runGoImports(input []byte) ([]byte, error) {
 
 	// Wrap the output in an error.
 	if err != nil {
-		return input, errors.New(string(res))
+		return input, fromGoFmt(string(res))
 	}
 
 	return res, nil

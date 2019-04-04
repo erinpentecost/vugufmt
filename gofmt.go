@@ -2,7 +2,6 @@ package vugufmt
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,13 +13,13 @@ import (
 func UseGoFmt(simplifyAST bool) func(*Formatter) {
 
 	return func(f *Formatter) {
-		f.ScriptFormatters["application/x-go"] = func(input []byte) ([]byte, error) {
+		f.ScriptFormatters["application/x-go"] = func(input []byte) ([]byte, *FmtError) {
 			return runGoFmt(input, simplifyAST)
 		}
 	}
 }
 
-func runGoFmt(input []byte, simplify bool) ([]byte, error) {
+func runGoFmt(input []byte, simplify bool) ([]byte, *FmtError) {
 	// build up command to run
 	cmd := exec.Command("gofmt")
 
@@ -42,7 +41,7 @@ func runGoFmt(input []byte, simplify bool) ([]byte, error) {
 
 	// start gofmt
 	if err := cmd.Start(); err != nil {
-		return input, fmt.Errorf("can't run gofmt: %s", err)
+		return input, &FmtError{Msg: fmt.Sprintf("can't run gofmt: %s", err.Error())}
 	}
 
 	// wait until gofmt is done
@@ -53,7 +52,7 @@ func runGoFmt(input []byte, simplify bool) ([]byte, error) {
 
 	// Wrap the output in an error.
 	if err != nil {
-		return input, errors.New(string(res))
+		return input, fromGoFmt(string(res))
 	}
 
 	return res, nil

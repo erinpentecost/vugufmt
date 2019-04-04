@@ -24,8 +24,8 @@ type Formatter struct {
 	// You can add your own custom one for JS, for
 	// example. If you want to use gofmt or goimports,
 	// see how to apply options in NewFormatter.
-	ScriptFormatters map[string]func([]byte) ([]byte, error)
-	StyleFormatter   func([]byte) ([]byte, error)
+	ScriptFormatters map[string]func([]byte) ([]byte, *FmtError)
+	StyleFormatter   func([]byte) ([]byte, *FmtError)
 }
 
 // NewFormatter creates a new formatter.
@@ -33,7 +33,7 @@ type Formatter struct {
 // Pass in vugufmt.UseGoImports to use goimports.
 func NewFormatter(opts ...func(*Formatter)) *Formatter {
 	f := &Formatter{
-		ScriptFormatters: make(map[string](func([]byte) ([]byte, error))),
+		ScriptFormatters: make(map[string](func([]byte) ([]byte, *FmtError))),
 	}
 
 	// apply options
@@ -45,7 +45,7 @@ func NewFormatter(opts ...func(*Formatter)) *Formatter {
 }
 
 // FormatScript formats script text nodes.
-func (f *Formatter) FormatScript(scriptType string, scriptContent []byte) ([]byte, error) {
+func (f *Formatter) FormatScript(scriptType string, scriptContent []byte) ([]byte, *FmtError) {
 	if f.ScriptFormatters == nil {
 		return scriptContent, nil
 	}
@@ -57,7 +57,7 @@ func (f *Formatter) FormatScript(scriptType string, scriptContent []byte) ([]byt
 }
 
 // FormatStyle formats script text nodes.
-func (f *Formatter) FormatStyle(styleContent []byte) ([]byte, error) {
+func (f *Formatter) FormatStyle(styleContent []byte) ([]byte, *FmtError) {
 	if f.StyleFormatter == nil {
 		return styleContent, nil
 	}
@@ -65,28 +65,39 @@ func (f *Formatter) FormatStyle(styleContent []byte) ([]byte, error) {
 }
 
 // FormatHTML formats script and css nodes.
-func (f *Formatter) FormatHTML(filename string, in io.Reader, out io.Writer) error {
+func (f *Formatter) FormatHTML(filename string, in io.Reader, out io.Writer) *FmtError {
 	izer := htmlx.NewTokenizer(in)
 	ts := tokenStack{}
 
 	curTok := htmlx.Token{}
 	for {
 		curTokType := izer.Next()
-		if curTokType == htmlx.ErrorToken {
-			if izer.Err() == io.EOF {
-				return nil
-			}
-			return izer.Err()
-		}
 
 		// quit on errors.
 		if curTokType == htmlx.ErrorToken {
 			if err := izer.Err(); err != nil {
 				if err != io.EOF {
-					return fmt.Errorf("%s:%v:%v: tokenization problem %s",
-						filename, curTok.Line, curTok.Column, err.Error())
+					return &FmtError{
+						Msg:    err.Error(),
+						Line:   curTok.Line,
+						Column: curTok.Column,
+					}
 				}
-				return nil
+				// it's ok if we hit the end,
+				// provided the stack is empty
+				if len(ts) == 0 {
+					return nil
+				}
+				return &FmtError{
+					Msg:    "missing end tags",
+					Line:   curTok.Line,
+					Column: curTok.Column,
+				}
+			}
+			return &FmtError{
+				Msg:    "tokenization error",
+				Line:   curTok.Line,
+				Column: curTok.Column,
 			}
 		}
 
@@ -101,8 +112,11 @@ func (f *Formatter) FormatHTML(filename string, in io.Reader, out io.Writer) err
 		case htmlx.EndTagToken:
 			lastPushed := ts.pop()
 			if lastPushed.DataAtom != curTok.DataAtom {
-				return fmt.Errorf("%s:%v:%v: mismatched ending tag (expected %s, found %s)",
-					filename, curTok.Line, curTok.Column, lastPushed.Data, curTok.Data)
+				return &FmtError{
+					Msg:    fmt.Sprintf("mismatched ending tag (expected %s, found %s)", lastPushed.Data, curTok.Data),
+					Line:   curTok.Line,
+					Column: curTok.Column,
+				}
 			}
 			out.Write(raw)
 		case htmlx.TextToken:
@@ -116,23 +130,20 @@ func (f *Formatter) FormatHTML(filename string, in io.Reader, out io.Writer) err
 				fmtr, err := f.FormatScript(parent.Data, raw)
 				// Exit out on error.
 				if err != nil {
-					// super hacky line offset edit
-					if strings.Contains(parent.Data, "application/x-go") {
-						wrappedErr := fromGoFmt(err.Error())
-						wrappedErr.Line += curTok.Line
-						wrappedErr.FileName = filename
-						return wrappedErr
-					}
-					return fmt.Errorf("%s:%v:%v: %s",
-						filename, curTok.Line, curTok.Column, err.Error())
+					err.Line += curTok.Line
+					err.FileName = filename
+					return err
 				}
 				out.Write(fmtr)
 			} else if parent.DataAtom == atom.Style {
 				// hey we are in a CSS text node
 				fmtr, err := f.FormatStyle(raw)
 				if err != nil {
-					return fmt.Errorf("%s:%v:%v: %s",
-						filename, curTok.Line, curTok.Column, err.Error())
+					return &FmtError{
+						Msg:    err.Error(),
+						Line:   curTok.Line,
+						Column: curTok.Column,
+					}
 				}
 				out.Write(fmtr)
 			} else {

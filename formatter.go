@@ -126,8 +126,16 @@ func (f *Formatter) FormatHTML(filename string, in io.Reader, out io.Writer) *Fm
 				//return fmt.Errorf("%s:%v:%v: orphaned text node",
 				//	filename, curTok.Line, curTok.Column)
 			} else if parent.DataAtom == atom.Script {
+				// determine the type of the script
+				scriptType := ""
+				for _, st := range parent.Attr {
+					if st.Key == "type" {
+						scriptType = st.Val
+					}
+				}
+
 				// hey we are in a script text node
-				fmtr, err := f.FormatScript(parent.Data, raw)
+				fmtr, err := f.FormatScript(scriptType, raw)
 				// Exit out on error.
 				if err != nil {
 					err.Line += curTok.Line
@@ -135,6 +143,7 @@ func (f *Formatter) FormatHTML(filename string, in io.Reader, out io.Writer) *Fm
 					return err
 				}
 				out.Write(fmtr)
+
 			} else if parent.DataAtom == atom.Style {
 				// hey we are in a CSS text node
 				fmtr, err := f.FormatStyle(raw)

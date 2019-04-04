@@ -23,14 +23,14 @@ func TestGoFmtNoError(t *testing.T) {
 			return
 		}
 
-		assert.NoError(t, err, f)
+		assert.Nil(t, err, f)
 		// get a handle on the file
 		testFile, err := ioutil.ReadFile(absPath)
 		testFileString := string(testFile)
-		assert.NoError(t, err, f)
+		assert.Nil(t, err, f)
 		// run gofmt on it
 		out, err := runGoFmt([]byte(testFileString), false)
-		assert.NoError(t, err, f)
+		assert.Nil(t, err, f)
 		// make sure nothing changed!
 		assert.NotNil(t, string(out), f)
 		assert.Equal(t, testFileString, string(out), f)
@@ -49,9 +49,8 @@ func TestGoFmtNoError(t *testing.T) {
 func TestGoFmtError(t *testing.T) {
 	testCode := "package yeah\n\nvar hey := woo\n"
 	// run gofmt on it
-	out, err := runGoFmt([]byte(testCode), false)
-	assert.Error(t, err, string(out))
-	fmtErr := fromGoFmt(string(out))
-	assert.Equal(t, 3, fmtErr.Line)
-	assert.Equal(t, 9, fmtErr.Column)
+	_, err := runGoFmt([]byte(testCode), false)
+	assert.NotNil(t, err)
+	assert.Equal(t, 3, err.Line)
+	assert.Equal(t, 9, err.Column)
 }

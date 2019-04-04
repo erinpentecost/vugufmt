@@ -92,20 +92,15 @@ func TestUncompilableGo(t *testing.T) {
 		assert.NoError(t, err, f)
 		// run gofmt on it
 		var buf bytes.Buffer
-		err = formatter.FormatHTML("oknow", strings.NewReader(testFileString), &buf)
-		assert.Error(t, err, f)
+		ferr := formatter.FormatHTML("oknow", strings.NewReader(testFileString), &buf)
+		assert.NotNil(t, ferr, f)
 		// confirm the offset is correct!
-		if err != nil {
-			assert.Equal(t, "oknow:46:22: expected ';', found broken", err.Error(), f)
-		}
+		assert.Equal(t, 46, ferr.Line, f)
+		assert.Equal(t, 22, ferr.Column, f)
 	}
 
-	err := filepath.Walk("./testdata/bad/badgo.vugu", func(path string, info os.FileInfo, err error) error {
-		fmtr(path)
-		return nil
-	})
+	fmtr("./testdata/bad/badgo.vugu")
 
-	assert.NoError(t, err)
 }
 
 func TestEscaping(t *testing.T) {
@@ -114,7 +109,7 @@ func TestEscaping(t *testing.T) {
 	formatter := NewFormatter(UseGoFmt(false))
 	// run gofmt on it
 	var buf bytes.Buffer
-	assert.NoError(t, formatter.FormatHTML("", strings.NewReader(testCode), &buf), testCode)
+	assert.Nil(t, formatter.FormatHTML("", strings.NewReader(testCode), &buf), testCode)
 	prettyVersion := buf.String()
 	assert.Equal(t, testCode, prettyVersion)
 }

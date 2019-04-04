@@ -85,7 +85,9 @@ func visitFile(path string, f os.FileInfo, err error) error {
 func isVuguFile(f os.FileInfo) bool {
 	// ignore non-Vugu files
 	name := f.Name()
-	return !f.IsDir() && !strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".vugu")
+	return !f.IsDir() &&
+		!strings.HasPrefix(name, ".") &&
+		(strings.HasSuffix(name, ".vugu") || (strings.HasSuffix(name, ".html")))
 }
 
 func report(err error) {

@@ -1,10 +1,10 @@
 # vugufmt
 
-gofmt, but for vugu files.
+gofmt, but for vugu and html files.
 
 ## Status
 
-This tool is a work in progress. It isn't ready for actual use yet!
+This tool is done (for now), and is being ported into the vugu project.
 
 ## Goals
 

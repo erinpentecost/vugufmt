@@ -1203,6 +1203,7 @@ func (z *Tokenizer) Token() Token {
 			key, val, moreAttr = z.TagAttr()
 			t.Attr = append(t.Attr, Attribute{"", atom.String(key), string(val)})
 		}
+		t.Data = string(name)
 		if a := atom.Lookup(name); a != 0 {
 			t.DataAtom, t.Data = a, a.String()
 		} else {

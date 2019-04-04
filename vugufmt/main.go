@@ -89,7 +89,7 @@ func isVuguFile(f os.FileInfo) bool {
 }
 
 func report(err error) {
-	fmt.Fprintf(os.Stderr, err.Error())
+	fmt.Fprintf(os.Stderr, "%s\n", strings.TrimSpace(err.Error()))
 	exitCode = 2
 }
 
